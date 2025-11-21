@@ -1,0 +1,257 @@
+---
+title: "Linear Mixed Model for Experiment 2"
+author: "JF C"
+date: "2025-11-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Linear Mixed Model for Accuracy (CR) - Experiment 2
+
+## Load R Packages
+
+```{r load_packages, echo=FALSE}
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(tidyverse)
+library(performance)
+library(ggplot2)
+library(lmtest)
+```
+
+## Import Data
+
+```{r import_data_exp2}
+cr_wide <- read_csv("exp2_cr_wide.csv")
+colnames(cr_wide)[1] <- 'sub'
+```
+
+## Data Transformation: Wide to Long Format
+
+We use pivot_longer to "collapse" all measurement columns.
+
+names_to: The names of the new columns we will create.
+
+names_sep: The separator used to split column names (e.g., "negative_invalid_1").
+           Here we use "_" as the separator.
+
+values_to: The name of the column storing measurement values (RT, accuracy, etc.).
+
+```{r data_wrangling_exp2, echo=FALSE}
+cr_long <- cr_wide %>%
+  pivot_longer(
+    cols = -c(sub),  # Select all columns except 'sub' (Subject ID) for transformation
+    names_to = c("Emotion", "Validity", "Intensity"), # Split column names into three new columns
+    names_sep = "_",                                  # Split by "_"
+    values_to = "cr"                                  # New column name for the Dependent Variable (DV)
+  )
+
+
+# --- Data Cleaning (Important!) ---
+cr_long <- cr_long %>%
+  mutate(
+    sub = factor(sub),
+    Emotion = factor(Emotion),
+    Validity = factor(Validity),
+    Intensity = factor(Intensity)
+  )
+
+# View the structure of the transformed long-format data
+cat("\n--- Structure of Long Data (str) ---\n")
+str(cr_long)
+
+```
+
+## Model 0: Fixed Effects Only
+
+```{r model0_fixed_exp2}
+model_0 <- lm(
+  cr ~ Emotion * Validity * Intensity,
+  data = cr_long
+)
+print(anova(model_0))
+```
+
+## Model 1: Random Intercept Model
+
+The DV (Dependent Variable) is predicted by Emotion, Validity, Intensity, and all their interactions.
+
+(1 | sub) indicates that we allow each subject (sub) to have a random baseline intercept.
+
+```{r model1_intercept_exp2}
+cat("\n--- Fitting Model 1 (Random Intercept) ---\n")
+model_intercept <- lmer(
+  cr ~ Emotion * Validity * Intensity + (1 | sub),
+  data = cr_long
+)
+
+cat("\n--- Model 1 Summary ---\n")
+print(summary(model_intercept))
+```
+
+## Model 2: Random Intercept and Random Slope Model
+
+(1 + Intensity | sub) allows each subject to have a different intercept,
+
+and allows the effect (slope) of Intensity to vary by subject.
+
+For demonstration, if Intensity is continuous (1, 2, 3, 4, 5), it can be converted to numeric first:
+`rt_long$Intensity_num <- as.numeric(as.character(rt_long$Intensity))`
+`model_slope <- lmer(DV ~ Emotion * Validity * Intensity + (1 + Intensity_num | sub), data = rt_long)`
+
+```{r model2_slope_exp2}
+cat("\n--- Fitting Model 2 (Random Slopes) ---\n")
+model_slope <- lmer(
+  cr ~ Emotion * Validity * Intensity + (1 + Emotion+Validity+Intensity | sub),
+  data = cr_long
+)
+
+cat("\n--- Model 2 Summary ---\n")
+print(summary(model_slope))
+```
+
+## Model Comparison
+
+```{r model_comparison_exp2}
+cat("\n--- Model Comparison (LRT) ---\n")
+model_comparison0 <- lrtest(model_0, model_intercept, model_slope)
+model_comparison <- anova(model_intercept, model_slope)
+print(model_comparison0)
+print(model_comparison)
+
+
+
+# If Pr(>Chisq) is significant (e.g., < 0.05), then model_slope is better.
+# Otherwise, stick with the more parsimonious model_intercept.
+# For subsequent steps, we uniformly select one model.
+best_model <- model_slope 
+
+# Use Satterthwaite method to estimate degrees of freedom, obtaining F-values and p-values.
+# This is similar to Type III Sum of Squares in traditional ANOVA.
+cat("\n--- ANOVA Table for Best Model (Type III F-tests) ---\n")
+anova_table <- anova(best_model, type = "3", ddf = "Satterthwaite")
+print(anova_table)
+
+
+
+cat("\nComparison: Model 0 (No Random Effects), Model 1 (Random Intercept), Model 2 (Random Intercept & Slope)\n")
+print(model_comparison0)
+cat("\nComparison: Model 1 vs. Model 2\n")
+print(model_comparison)
+cat("\nANOVA Results for the Best Model\n")
+print(anova_table)
+
+```
+
+# Linear Mixed Model for Reaction Time (RT) - Experiment 2
+
+## Import Data
+
+```{r import_rt_data_exp2}
+rt_wide <- read_csv("exp2_rt_wide.csv")
+colnames(rt_wide)[1] <- 'sub'
+
+rt_long <- rt_wide %>%
+  pivot_longer(
+    cols = -c(sub),  # Select all columns except 'sub' (Subject ID) for transformation
+    names_to = c("Emotion", "Validity", "Intensity"), # Split column names into three new columns
+    names_sep = "_",                                  # Split by "_"
+    values_to = "rt"                                  # New column name for the Dependent Variable (DV)
+  )
+
+
+# --- Data Cleaning (Important!) ---
+rt_long <- rt_long %>%
+  mutate(
+    sub = factor(sub),
+    Emotion = factor(Emotion),
+    Validity = factor(Validity),
+    Intensity = factor(Intensity)
+  )
+
+# View the structure of the transformed long-format data
+cat("\n--- Structure of Long Data (str) ---\n")
+str(rt_long)
+
+
+```
+
+## Model 0
+
+```{r rt_model0_fixed_exp2}
+rtmodel_0 <- lm(
+  rt ~ Emotion * Validity * Intensity ,
+  data = rt_long
+)
+print(anova(rtmodel_0))
+```
+
+## Model 1
+
+```{r rt_model1_intercept_exp2}
+cat("\n--- Fitting Model 1 (Random Intercept) ---\n")
+rtmodel_intercept <- lmer(
+  rt ~ Emotion * Validity * Intensity + (1 | sub),
+  data = rt_long
+)
+
+cat("\n--- Model 1 Summary ---\n")
+print(summary(rtmodel_intercept))
+```
+
+## Model 2
+
+```{r rt_model2_slope_exp2}
+cat("\n--- Fitting Model 2 (Random Slopes) ---\n")
+rtmodel_slope <- lmer(
+  rt ~ Emotion * Validity * Intensity + (1 + Emotion+Validity+Intensity | sub),
+  data = rt_long
+)
+
+cat("\n--- Model 2 Summary ---\n")
+print(summary(rtmodel_slope))
+```
+
+## Model Comparison
+
+```{r rt_model_comparison_exp2}
+cat("\n--- Model Comparison (LRT) ---\n")
+model_comparison0 <- lrtest(rtmodel_0, rtmodel_intercept, rtmodel_slope)
+model_comparison <- anova(rtmodel_intercept, rtmodel_slope)
+print(model_comparison0)
+print(model_comparison)
+
+
+
+# If Pr(>Chisq) is significant (e.g., < 0.05), then model_slope is better.
+# Otherwise, stick with the more parsimonious model_intercept.
+# For subsequent steps, we uniformly select one model.
+best_model <- rtmodel_slope 
+
+# Use Satterthwaite method to estimate degrees of freedom, obtaining F-values and p-values.
+# This is similar to Type III Sum of Squares in traditional ANOVA.
+cat("\n--- ANOVA Table for Best Model (Type III F-tests) ---\n")
+anova_table <- anova(best_model, type = "3", ddf = "Satterthwaite")
+print(anova_table)
+
+
+
+cat("\nComparison: Model 0 (No Random Effects), Model 1 (Random Intercept), Model 2 (Random Intercept & Slope)\n")
+print(model_comparison0)
+cat("\nComparison: Model 1 vs. Model 2\n")
+print(model_comparison)
+
+cat("\nANOVA Results for the Best Model\n")
+print(anova_table)
+
+```
+
+```{r check model, fig.width=12, fig.height=12}
+cat("\n--- Model Diagnostics ---\n")
+check_model(best_model)
+
+```
